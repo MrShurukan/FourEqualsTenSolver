@@ -4,33 +4,89 @@ namespace FourEqualsTenBreaker;
 
 internal static class Program 
 {
-    public static void Main()
+    public static void Main(string[] args)
     {
-        ConsoleHelper.WriteHello();
+        // Locale parameter + potential file output parameter
+        var (locale, outputPath) = ParseArguments(args);
 
-        var (numbers, availableOperators) = ConsoleHelper.GetInitialValues();
+        Localization.CurrentLanguage = locale;
+        if (outputPath is not null)
+            InitializeFileOrException(outputPath);
 
+        ConsoleUtils.WriteHello();
+
+        // This gets the array of numbers and the array of all possible operators for this level
+        // Available operators by default are '(+-*/)'
+        var (numbers, availableOperators) = ConsoleUtils.GetInitialValues();
+
+        // This filters input and makes it easier to use in the future
         var operatorsInfo = new OperatorsInfo(
             PlusAvailable: availableOperators.Contains('+'),
             MinusAvailable: availableOperators.Contains('-'),
             DivisionAvailable: availableOperators.Contains('/'),
             MultiplicationAvailable: availableOperators.Contains('*'),
             BracketsAvailable: availableOperators.Contains('(') && availableOperators.Contains(')'));
+
+        var validAnswers = new List<string>();
+        CalculateAllPossibleSolutions(numbers, operatorsInfo, ref validAnswers);
         
-        CalculateAllPossibleSolutions(numbers, operatorsInfo);
+        Console.ResetColor();
+    }
+    private static void InitializeFileOrException(string outputPath)
+    {
+        try
+        {
+            File.WriteAllText(outputPath, "");
+        }
+        catch (IOException e)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            ConsoleUtils.LocaleWriteLine(Text.CouldntCreateFileDueToError);
+            Console.WriteLine(e.Message);
+
+            Console.ResetColor();
+            Environment.Exit(0);
+        }
+    }
+    private static (Languages locale, string? outputPath) ParseArguments(IReadOnlyList<string> args)
+    {
+        var locale = Languages.English;
+        string? outputPath = null;
+
+        for (var i = 0; i < args.Count; i++)
+        {
+            var arg = args[i];
+            switch (arg)
+            {
+                case "-ru":
+                    locale = Languages.Russian;
+                    break;
+                case "-en":
+                    locale = Languages.English;
+                    break;
+                case "-o":
+                    if (i + 1 == args.Count)
+                    {
+                        ConsoleUtils.ExitWithError(Text.OutputPathWasNotProvided);
+                        return (locale, outputPath);
+                    }
+                    outputPath = args[i + 1];
+                    break;
+            }
+        }
+        return (locale, outputPath);
     }
 
-    private static void CalculateAllPossibleSolutions(int[] numbers, OperatorsInfo operatorsInfo)
+    private static void CalculateAllPossibleSolutions(int[] numbers, OperatorsInfo operatorsInfo, ref List<string> validAnswers)
     {
         var permutations = PermutationSolver.Permute(numbers);
-        var validAnswers = new List<string>();
 
         for (var permutationIndex = 0; permutationIndex < permutations.Length; permutationIndex++)
         {
             var permutation = permutations[permutationIndex];
             
             Console.ResetColor();
-            Console.Write($"Пермутация №{permutationIndex+1} ({string.Join("", permutation)})... ");
+            Console.Write($"{Localization.GetText(Text.Permutation)} №{permutationIndex+1} ({string.Join("", permutation)})... ");
 
             var algebraicNotations = new List<string>();
             GetAlgebraicNotationsOfPermutation(permutation, operatorsInfo, ref algebraicNotations);
@@ -49,11 +105,12 @@ internal static class Program
             }
             
             if (permutationValidAnswers.Count == 0)
-                Console.WriteLine("не найдено решений");
+                ConsoleUtils.LocaleWriteLine(Text.NoSolutionsFound);
             else
             {
                 Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine($"найдено {permutationValidAnswers.Count} решений!");
+                ConsoleUtils.LocaleWrite(Text.FoundSolutions);
+                Console.WriteLine($" ({permutationValidAnswers.Count})");
             }
 
             validAnswers.AddRange(permutationValidAnswers);
